@@ -1,11 +1,21 @@
 <p align="center">
-  <img src="wivern.png" alt="Wivern" width="200">
+  <picture>
+    <img src="wivern.png" alt="Wivern" width="150">
+  </picture>
 </p>
 
 <h1 align="center">Wivern</h1>
 <p align="center"><b>SillyTavern on Android</b></p>
 <p align="center">
   A fork of <a href="https://github.com/SillyTavern/SillyTavern">SillyTavern</a> that packages the full server and UI into a single native Android app.
+</p>
+
+<p align="center">
+  <img src="screenshot1.png" alt="Welcome screen" width="200">
+  &nbsp;&nbsp;
+  <img src="screenshot2.png" alt="Chat view" width="200">
+  &nbsp;&nbsp;
+  <img src="screenshot3.png" alt="Settings" width="200">
 </p>
 
 ---
