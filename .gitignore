@@ -57,3 +57,14 @@ public/scripts/extensions/third-party
 yarn.lock
 *.code-workspace
 test-results/
+
+# Wivern Android build artifacts
+icudt74l.dat
+android/.gradle/
+android/app/.cxx/
+android/app/build/
+android/build/
+android/app/src/main/assets/sillytavern.zip
+android/local.properties
+android/app/libnode/
+*.apk

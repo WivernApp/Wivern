@@ -3,17 +3,29 @@ import fs from 'node:fs';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
 
-import { pipeline, env, RawImage } from 'sillytavern-transformers';
+// Lazy-load sillytavern-transformers to avoid Unicode regex parse errors on
+// runtimes with small-ICU (e.g. nodejs-mobile).  The module is only needed
+// when getPipeline / getRawImage are actually called.
+let _pipeline, _env, _RawImage;
+
+async function loadTransformers() {
+    if (!_pipeline) {
+        const mod = await import('sillytavern-transformers');
+        _pipeline = mod.pipeline;
+        _env = mod.env;
+        _RawImage = mod.RawImage;
+        configureTransformers();
+    }
+}
+
 import { getConfigValue } from './util.js';
 import { serverDirectory } from './server-directory.js';
 
-configureTransformers();
-
 function configureTransformers() {
     // Limit the number of threads to 1 to avoid issues on Android
-    env.backends.onnx.wasm.numThreads = 1;
+    _env.backends.onnx.wasm.numThreads = 1;
     // Use WASM from a local folder to avoid CDN connections
-    env.backends.onnx.wasm.wasmPaths = path.join(serverDirectory, 'node_modules', 'sillytavern-transformers', 'dist') + path.sep;
+    _env.backends.onnx.wasm.wasmPaths = path.join(serverDirectory, 'node_modules', 'sillytavern-transformers', 'dist') + path.sep;
 }
 
 const tasks = {
@@ -56,11 +68,12 @@ const tasks = {
  */
 export async function getRawImage(image) {
     try {
+        await loadTransformers();
         const buffer = Buffer.from(image, 'base64');
         const byteArray = new Uint8Array(buffer);
         const blob = new Blob([byteArray]);
 
-        const rawImage = await RawImage.fromBlob(blob);
+        const rawImage = await _RawImage.fromBlob(blob);
         return rawImage;
     } catch {
         return null;
@@ -121,6 +134,7 @@ async function migrateCacheToDataDir() {
  * @returns {Promise<import('sillytavern-transformers').Pipeline>} The transformers.js pipeline
  */
 export async function getPipeline(task, forceModel = '') {
+    await loadTransformers();
     await migrateCacheToDataDir();
 
     if (tasks[task].pipeline) {
@@ -135,7 +149,7 @@ export async function getPipeline(task, forceModel = '') {
     const model = forceModel || getModelForTask(task);
     const localOnly = !getConfigValue('extensions.models.autoDownload', true, 'boolean');
     console.log('Initializing transformers.js pipeline for task', task, 'with model', model);
-    const instance = await pipeline(task, model, { cache_dir: cacheDir, quantized: tasks[task].quantized ?? true, local_files_only: localOnly });
+    const instance = await _pipeline(task, model, { cache_dir: cacheDir, quantized: tasks[task].quantized ?? true, local_files_only: localOnly });
     tasks[task].pipeline = instance;
     tasks[task].currentModel = model;
     // @ts-ignore
