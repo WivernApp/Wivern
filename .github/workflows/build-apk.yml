@@ -9,6 +9,9 @@ on:
       - 'screenshot*.png'
       - 'wivern.png'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
