@@ -3,20 +3,11 @@ name: Build APK
 on:
   push:
     branches: [release]
+    tags: ['v*']
     paths-ignore:
       - '*.md'
       - 'screenshot*.png'
       - 'wivern.png'
-  workflow_dispatch:
-    inputs:
-      create_release:
-        description: 'Create a GitHub release with the APK'
-        type: boolean
-        default: false
-      release_tag:
-        description: 'Release tag (e.g. v1.0.0). Required if creating a release.'
-        type: string
-        default: ''
 
 jobs:
   build:
@@ -86,13 +77,12 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Create GitHub Release
-        if: inputs.create_release && inputs.release_tag != ''
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.release_tag }}
-          name: Wivern ${{ inputs.release_tag }}
+          name: Wivern ${{ github.ref_name }}
           body: |
-            Wivern ${{ inputs.release_tag }} — SillyTavern on Android
+            Wivern ${{ github.ref_name }} — SillyTavern on Android
 
             Download the APK below and sideload it on your Android device.
           files: android/app/build/outputs/apk/debug/app-debug.apk
