@@ -1,0 +1,100 @@
+name: Build APK
+
+on:
+  push:
+    branches: [release]
+    paths-ignore:
+      - '*.md'
+      - 'screenshot*.png'
+      - 'wivern.png'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub release with the APK'
+        type: boolean
+        default: false
+      release_tag:
+        description: 'Release tag (e.g. v1.0.0). Required if creating a release.'
+        type: string
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Babel unicode-property-regex plugin
+        run: npm install @babel/core @babel/plugin-transform-unicode-property-regex
+
+      - name: Patch Unicode property escapes
+        run: node fix-unicode-regex.mjs
+
+      - name: Create sillytavern.zip
+        run: |
+          zip -r /tmp/sillytavern.zip . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "android/*" \
+            -x "backups/*" \
+            -x "docker/*" \
+            -x "test-results/*" \
+            -x ".vscode/*" \
+            -x ".idea/*" \
+            -x "*.colab" \
+            -x "node_modules/.cache/*" \
+            -x "screenshot*.png" \
+            -x "icudt74l.dat"
+          mkdir -p android/app/src/main/assets
+          mv /tmp/sillytavern.zip android/app/src/main/assets/sillytavern.zip
+          echo "Zip size: $(du -h android/app/src/main/assets/sillytavern.zip | cut -f1)"
+
+      - name: Download nodejs-mobile binaries
+        run: |
+          curl -L -o /tmp/nodejs-mobile.zip \
+            https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip
+          mkdir -p android/app/libnode
+          unzip -q /tmp/nodejs-mobile.zip -d android/app/libnode
+          rm /tmp/nodejs-mobile.zip
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wivern-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Create GitHub Release
+        if: inputs.create_release && inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: Wivern ${{ inputs.release_tag }}
+          body: |
+            Wivern ${{ inputs.release_tag }} — SillyTavern on Android
+
+            Download the APK below and sideload it on your Android device.
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          draft: false
+          prerelease: false
