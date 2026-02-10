@@ -1,95 +1,117 @@
-<a name="readme-top"></a>
+<p align="center">
+  <picture>
+    <img src="../wivern.png" alt="Wivern" width="150">
+  </picture>
+</p>
 
-![][cover]
+<h1 align="center">Wivern</h1>
+<p align="center"><b>SillyTavern on Android</b></p>
+<p align="center">
+  A fork of <a href="https://github.com/SillyTavern/SillyTavern">SillyTavern</a> that packages the full server and UI into a single native Android app.
+</p>
 
-<div align="center">
-
-English | [German](readme-de_de.md) | [中文](readme-zh_cn.md) | [繁體中文](readme-zh_tw.md) | [日本語](readme-ja_jp.md) | [Русский](readme-ru_ru.md) | [한국어](readme-ko_kr.md)
-
-[![GitHub Stars](https://img.shields.io/github/stars/SillyTavern/SillyTavern.svg)](https://github.com/SillyTavern/SillyTavern/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/SillyTavern/SillyTavern.svg)](https://github.com/SillyTavern/SillyTavern/forks)
-[![GitHub Issues](https://img.shields.io/github/issues/SillyTavern/SillyTavern.svg)](https://github.com/SillyTavern/SillyTavern/issues)
-[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/SillyTavern/SillyTavern.svg)](https://github.com/SillyTavern/SillyTavern/pulls)
-
-</div>
+<p align="center">
+  <img src="../screenshot1.png" alt="Welcome screen" width="200">
+  &nbsp;&nbsp;
+  <img src="../screenshot2.png" alt="Chat view" width="200">
+  &nbsp;&nbsp;
+  <img src="../screenshot3.png" alt="Settings" width="200">
+</p>
 
 ---
 
-SillyTavern provides a single unified interface for many LLM APIs (KoboldAI/CPP, Horde, NovelAI, Ooba, Tabby, OpenAI, OpenRouter, Claude, Mistral and more), a mobile-friendly layout, Visual Novel Mode, Automatic1111 & ComfyUI API image generation integration, TTS, WorldInfo (lorebooks), customizable UI, auto-translate, more prompt options than you'd ever want or need, and endless growth potential via third-party extensions.
+## What is this?
 
-We have a [Documentation website](https://docs.sillytavern.app/) to answer most of your questions and help you get started.
+Wivern takes the full [SillyTavern](https://github.com/SillyTavern/SillyTavern) (v1.15.0) — server, frontend, extensions, everything — and runs it natively on Android. No Termux. No external browser. One app, tap to open, works offline.
 
-## What is SillyTavern?
+Under the hood, the Node.js server runs as an Android foreground service using [nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile) (Node 18.20.4 compiled for ARM64/ARMv7/x86_64). The SillyTavern UI loads in a native WebView pointed at `localhost:8000`.
 
-SillyTavern (or ST for short) is a locally installed user interface that allows you to interact with text generation LLMs, image generation engines, and TTS voice models.
+## Architecture
 
-Beginning in February 2023 as a fork of TavernAI 1.2.8, SillyTavern now has over 200 contributors and 2 years of independent development under its belt, and continues to serve as a leading software for savvy AI hobbyists.
+```
+┌─────────────────────────────────┐
+│         Android App             │
+│                                 │
+│  ┌───────────┐  ┌────────────┐  │
+│  │  WebView  │  │  Node.js   │  │
+│  │ (ST UI)   │←→│  Server    │  │
+│  │           │  │ (ST 1.15)  │  │
+│  └───────────┘  └────────────┘  │
+│   localhost:8000   Foreground   │
+│                    Service      │
+└─────────────────────────────────┘
+         ↕ JNI Bridge (C++)
+    ┌──────────────┐
+    │ nodejs-mobile│
+    │  libnode.so  │
+    └──────────────┘
+```
 
-## Our Vision
+**First launch** extracts the bundled SillyTavern zip (~180MB) into app-private storage, then starts the server. Subsequent launches skip extraction and boot in a few seconds.
 
-1. We aim to empower users with as much utility and control over their LLM prompts as possible. The steep learning curve is part of the fun!
-2. We do not provide any online or hosted services, nor programmatically track any user data.
-3. SillyTavern is a passion project brought to you by a dedicated community of LLM enthusiasts, and will always be free and open sourced.
+## Changes from upstream SillyTavern
 
-## Do I need a powerful PC to run SillyTavern?
+This is a minimal fork. The entire Android wrapper is additive — only one upstream file is modified:
 
-The hardware requirements are minimal: it will run on anything that can run NodeJS 18 or higher. If you intend to do LLM inference on your local machine, we recommend a 3000-series NVIDIA graphics card with at least 6GB of VRAM, but actual requirements may vary depending on the model and backend you choose to use.
+| Change | Why |
+|--------|-----|
+| `src/transformers.js` — lazy-load the `sillytavern-transformers` module | nodejs-mobile has limited resources; loading the full transformers pipeline at startup is unnecessary overhead |
+| `wivern-start.js` — wrapper entry point | Sets the working directory, polyfills `TextDecoder` (nodejs-mobile lacks full ICU), copies default config on first run, then hands off to `server.js` |
+| `fix-unicode-regex.mjs` — build-time Babel transform | nodejs-mobile ships without ICU, so `\p{L}`, `\p{N}`, etc. in regex literals cause `SyntaxError` at parse time. This script auto-discovers and transforms all affected files in `node_modules` using `@babel/plugin-transform-unicode-property-regex` |
+| `android/` — the native Android app | Java activity with WebView + file picker, foreground service for Node.js, C++ JNI bridge to `libnode.so`, CMake build |
+| `build-android.sh` — one-command build | Patches unicode regexes, zips the project, runs Gradle |
 
-## Questions or suggestions?
+Upstream updates from `SillyTavern/SillyTavern` can be merged in normally. The only potential conflict is `src/transformers.js`.
 
-### Discord server
+## The ICU problem (and how it's solved)
 
-| [![][discord-shield-badge]][discord-link] | [Join our Discord community!](https://discord.gg/sillytavern) Get support, share favorite characters and prompts. |
-| :---------------------------------------- | :----------------------------------------------------------------------------------------------------------------- |
+nodejs-mobile is compiled without ICU (International Components for Unicode). This means:
 
-Or get in touch with the developers directly:
+- **Unicode property escapes** like `/\p{L}/u` throw `SyntaxError` at parse time
+- **`TextDecoder`** rejects the `fatal` option
+- These patterns appear in **27+ files** across `node_modules` (zod, tiktoken, gpt-3-encoder, highlight.js, webpack, sillytavern-transformers, etc.)
 
-* Discord: cohee, rossascends, wolfsblvt
-* Reddit: [/u/RossAscends](https://www.reddit.com/user/RossAscends/), [/u/sillylossy](https://www.reddit.com/user/sillylossy/), [u/Wolfsblvt](https://www.reddit.com/user/Wolfsblvt/)
-* [Post a GitHub issue](https://github.com/SillyTavern/SillyTavern/issues)
+Wivern solves this at build time with `fix-unicode-regex.mjs`, which uses Babel to compile every `\p{}` regex literal down to equivalent character class ranges before bundling. The `TextDecoder` issue is handled by a runtime polyfill in `wivern-start.js` that strips the unsupported `fatal` option.
 
-### I like your project! How do I contribute?
+## Building from source
 
-1. Send pull requests. Learn how to contribute: [CONTRIBUTING.md](../CONTRIBUTING.md)
-2. Send feature suggestions and issue reports using the provided templates.
-3. Read this entire readme file and check the documentation website first, to avoid sending duplicate issues.
+### Prerequisites
 
-## Screenshots
+- Linux or macOS (build host)
+- Android SDK (API 34), NDK 26.x, CMake 3.22+
+- JDK 17
+- Node.js 18+
+- [nodejs-mobile prebuilt binaries](https://github.com/nodejs-mobile/nodejs-mobile/releases) (`nodejs-mobile-v18.20.4-android.zip`)
 
-<img width="500" alt="image" src="https://github.com/user-attachments/assets/9b5f32f0-c3b3-4102-b3f5-0e9213c0f50f">
-<img width="500" alt="image" src="https://github.com/user-attachments/assets/913fdbaa-7d33-42f1-ae2c-89dca41c53d1">
+### Steps
 
-## Installation
+```bash
+# Clone
+git clone https://github.com/WivernApp/Wivern.git
+cd Wivern
+npm install
 
-For detailed installation instructions, please visit our documentation:
+# Place nodejs-mobile binaries
+mkdir -p android/app/libnode
+# Extract bin/ and include/ from nodejs-mobile-v18.20.4-android.zip
+# into android/app/libnode/
 
-* **[Windows Installation Guide](https://docs.sillytavern.app/installation/windows/)**
-* **[MacOS/Linux Installation Guide](https://docs.sillytavern.app/installation/linuxmacos/)**
-* **[Android (Termux) Installation Guide](https://docs.sillytavern.app/installation/android-(termux)/)**
-* **[Docker Installation Guide](https://docs.sillytavern.app/installation/docker/)**
+# Point to your Android SDK
+echo "sdk.dir=/path/to/android-sdk" > android/local.properties
 
-## License and credits
+# Build (patches, zips, compiles — all in one)
+./build-android.sh
+```
 
-**This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.**
+Output: `android/app/build/outputs/apk/debug/app-debug.apk`
 
-* [TavernAI](https://github.com/TavernAI/TavernAI) 1.2.8 by Humi: MIT License
-* Portions of CncAnon's TavernAITurbo mod used with permission
-* Visual Novel Mode inspired by the work of PepperTaco (<https://github.com/peppertaco/Tavern/>)
-* Noto Sans font by Google (OFL license)
-* Lexer/Parser by Chevrotain (Apache-2.0 license) <https://github.com/chevrotain/chevrotain>
-* Icon theme by Font Awesome <https://fontawesome.com> (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
-* Default content by @OtisAlejandro (Seraphina character and lorebook) and @kallmeflocc (10K Discord Users Celebratory Background)
-* Docker guide by [@mrguymiah](https://github.com/mrguymiah) and [@Bronya-Rand](https://github.com/Bronya-Rand)
-* kokoro-js library by [@hexgrad](https://github.com/hexgrad) (Apache-2.0 License)
+### What `build-android.sh` does
 
-## Top Contributors
+1. `npm install` (if needed)
+2. Runs `fix-unicode-regex.mjs` to patch `\p{}` patterns in `node_modules`
+3. Zips the project (excluding `.git`, `android/`, build artifacts) into `android/app/src/main/assets/sillytavern.zip`
+4. Runs `gradlew assembleDebug` to produce the APK
 
-[![Contributors](https://contrib.rocks/image?repo=SillyTavern/SillyTavern)](https://github.com/SillyTavern/SillyTavern/graphs/contributors)
+## License
 
-<!-- LINK GROUP -->
-[cover]: https://github.com/user-attachments/assets/01a6ae9a-16aa-45f2-8bff-32b5dc587e44
-[discord-link]: https://discord.gg/sillytavern
-[discord-shield-badge]: https://img.shields.io/discord/1100685673633153084?color=5865F2&label=discord&labelColor=black&logo=discord&logoColor=white&style=for-the-badge
+AGPL-3.0, same as upstream SillyTavern.
