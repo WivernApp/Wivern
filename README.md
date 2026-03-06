@@ -22,7 +22,7 @@
 
 ## What is this?
 
-Wivern takes the full [SillyTavern](https://github.com/SillyTavern/SillyTavern) (v1.15.0) — server, frontend, extensions, everything — and runs it natively on Android. No Termux. No external browser. One app, tap to open, works offline.
+Wivern takes the full [SillyTavern](https://github.com/SillyTavern/SillyTavern) — server, frontend, extensions, everything — and runs it natively on Android. No Termux. No external browser. One app, tap to open, works offline.
 
 Under the hood, the Node.js server runs as an Android foreground service using [nodejs-mobile](https://github.com/nicolo-ribaudo/ppr-prebuilt-nodejs-mobile) (Node 18.20.4 compiled for ARM64/ARMv7/x86_64). The SillyTavern UI loads in a native WebView pointed at `localhost:8000`.
 
@@ -35,7 +35,7 @@ Under the hood, the Node.js server runs as an Android foreground service using [
 │  ┌───────────┐  ┌────────────┐  │
 │  │  WebView  │  │  Node.js   │  │
 │  │ (ST UI)   │←→│  Server    │  │
-│  │           │  │ (ST 1.15)  │  │
+│  │           │  │            │  │
 │  └───────────┘  └────────────┘  │
 │   localhost:8000   Foreground   │
 │                    Service      │
