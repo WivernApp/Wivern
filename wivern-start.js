@@ -20,6 +20,16 @@ globalThis.TextDecoder = class PatchedTextDecoder extends OriginalTextDecoder {
     }
 };
 
+// Polyfill Intl (not available without ICU).
+// Provides basic Collator for string sorting used by SillyTavern server code.
+if (typeof globalThis.Intl === 'undefined') {
+    globalThis.Intl = {
+        Collator: function () {
+            return { compare: (a, b) => a < b ? -1 : a > b ? 1 : 0 };
+        },
+    };
+}
+
 // --- End polyfills ---
 
 // Ensure config.yaml exists before server.js tries to read it
